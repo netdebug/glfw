@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "limits.h"
 
 // Action for EWMH client messages
 #define _NET_WM_STATE_REMOVE        0
@@ -227,6 +228,14 @@ static GLboolean createWindow(_GLFWwindow* window,
         XSetWMNormalHints(_glfwLibrary.X11.display, window->X11.handle, hints);
         XFree(hints);
     }
+    
+    //prepare for drag and drop
+    {
+		//Announce XDND support
+		Atom XdndAware = XInternAtom(_glfwLibrary.X11.display, "XdndAware", False);
+		Atom version=5;
+		XChangeProperty(_glfwLibrary.X11.display, window->X11.handle, XdndAware, XA_ATOM, 32, PropModeReplace, (unsigned char*)&version, 1);
+	}
 
     _glfwPlatformSetWindowTitle(window, wndconfig->title);
 
@@ -463,18 +472,124 @@ static _GLFWwindow* findWindow(Window handle)
     return NULL;
 }
 
+//========================================================================
+// This function takes a list of targets which can be converted to (atom_list, nitems)
+//========================================================================
+Atom pick_target_from_list(Display* disp, Atom* atom_list, int nitems)
+{
+	Atom to_be_requested = None;
+	//This is higger than the maximum priority.
+	int priority=INT_MAX;
+	
+	int i = 0;
+	for(i=0; i < nitems; i++)
+	{
+		//unsigned char* atom_name = GetAtomName(disp, atom_list[i]);
+
+	
+		//See if this data type is allowed and of higher priority (closer to zero)
+		//than the present one.
+		//if(datatypes.find(atom_name)!= datatypes.end())
+		//	if(priority > datatypes[atom_name])
+		//	{	
+
+				//priority = datatypes[atom_name];
+				to_be_requested = atom_list[i];
+		//}
+	}
+
+	return to_be_requested;
+}
+
+//========================================================================
+// Finds the best target given up to three atoms provided (any can be None). Useful for part of the Xdnd protocol.
+//========================================================================
+Atom pick_target_from_atoms(Display* disp, Atom t1, Atom t2, Atom t3)
+{
+	Atom atoms[3];
+	int  n=0;
+
+	if(t1 != None)
+		atoms[n++] = t1;
+
+	if(t2 != None)
+		atoms[n++] = t2;
+
+	if(t3 != None)
+		atoms[n++] = t3;
+
+	return pick_target_from_list(disp, atoms, n);
+}
+//========================================================================
+// This fetches all the data from a property
+//========================================================================
+_GLFWWindowX11Property read_property(Display* disp, Window w, Atom property)
+{
+	Atom actual_type;
+	int actual_format;
+	unsigned long nitems;
+	unsigned long bytes_after;
+	unsigned char *ret=0;
+	
+	int read_bytes = 1024;	
+
+	//Keep trying to read the property until there are no
+	//bytes unread.
+	do
+	{
+		if(ret != 0)
+			XFree(ret);
+		XGetWindowProperty(disp, w, property, 0, read_bytes, False, AnyPropertyType,
+							&actual_type, &actual_format, &nitems, &bytes_after, 
+							&ret);
+
+		read_bytes *= 2;
+	}while(bytes_after != 0);
+
+	_GLFWWindowX11Property p = {ret, actual_format, nitems, actual_type};
+
+	return p;
+}
+
+//========================================================================
+// Finds the best target given a local copy of a property.
+//========================================================================
+Atom pick_target_from_targets(Display* disp, _GLFWWindowX11Property p) //, map<string, int> datatypes
+{
+	//The list of targets is a list of atoms, so it should have type XA_ATOM
+	//but it may have the type TARGETS instead.
+
+	if((p.type != XA_ATOM ) || p.format != 32) //used to be && p.type != XA_TARGETS
+	{ 
+		//This would be really broken. Targets have to be an atom list
+		//and applications should support this. Nevertheless, some
+		//seem broken (MATLAB 7, for instance), so ask for STRING
+		//next instead as the lowest common denominator
+
+		//if(datatypes.count("STRING"))
+		//	return XA_STRING;
+		//else
+		return None;
+	}
+	else
+	{
+		Atom *atom_list = (Atom*)p.data;
+		
+		return pick_target_from_list(disp, atom_list, p.nitems);
+	}
+}
+
 
 //========================================================================
 // Get and process next X event (called by _glfwPlatformPollEvents)
 //========================================================================
-
 static void processSingleEvent(void)
 {
     _GLFWwindow* window;
 
     XEvent event;
     XNextEvent(_glfwLibrary.X11.display, &event);
-
+	
     switch (event.type)
     {
         case KeyPress:
@@ -698,6 +813,8 @@ static void processSingleEvent(void)
 
         case ClientMessage:
         {
+        	
+        	
             // Custom client message, probably from the window manager
             window = findWindow(event.xclient.window);
             if (window == NULL)
@@ -705,6 +822,20 @@ static void processSingleEvent(void)
                 fprintf(stderr, "Cannot find GLFW window structure for ClientMessage event\n");
                 return;
             }
+
+
+//Atoms for Xdnd
+			Atom XdndEnter = XInternAtom(_glfwLibrary.X11.display, "XdndEnter", False);
+			Atom XdndPosition = XInternAtom(_glfwLibrary.X11.display, "XdndPosition", False);
+			Atom XdndStatus = XInternAtom(_glfwLibrary.X11.display, "XdndStatus", False);
+			Atom XdndTypeList = XInternAtom(_glfwLibrary.X11.display, "XdndTypeList", False);
+			Atom XdndActionCopy = XInternAtom(_glfwLibrary.X11.display, "XdndActionCopy", False);
+			Atom XdndDrop = XInternAtom(_glfwLibrary.X11.display, "XdndDrop", False);
+			Atom XdndLeave = XInternAtom(_glfwLibrary.X11.display, "XdndLeave", False);
+			Atom XdndFinished = XInternAtom(_glfwLibrary.X11.display, "XdndFinished", False);
+			Atom XdndSelection = XInternAtom(_glfwLibrary.X11.display, "XdndSelection", False);
+			Atom XdndProxy = XInternAtom(_glfwLibrary.X11.display, "XdndProxy", False);
+        	
 
             if ((Atom) event.xclient.data.l[0] == _glfwLibrary.X11.wmDeleteWindow)
             {
@@ -725,7 +856,32 @@ static void processSingleEvent(void)
                            False,
                            SubstructureNotifyMask | SubstructureRedirectMask,
                            &event);
-            }
+            }else if(event.xclient.message_type == XdndEnter)
+			{
+				int more_than_3 = event.xclient.data.l[1] & 1;
+				Window source = event.xclient.data.l[0];
+				
+				int xdnd_version=0;
+				xdnd_version = ( event.xclient.data.l[1] >> 24);
+				
+				Atom to_be_requested = None;
+				
+				//Query which conversions are available and pick the best
+
+				if(more_than_3)
+				{
+					//Fetch the list of possible conversions
+					//Notice the similarity to TARGETS with paste.
+					_GLFWWindowX11Property p = read_property(_glfwLibrary.X11.display, source , XdndTypeList);
+					to_be_requested = pick_target_from_targets(_glfwLibrary.X11.display, p);
+					XFree(p.data);
+				}
+				else
+				{
+					//Use the available list
+					to_be_requested = pick_target_from_atoms(_glfwLibrary.X11.display, event.xclient.data.l[2], event.xclient.data.l[3], event.xclient.data.l[4]);
+				}
+			}
 
             break;
         }

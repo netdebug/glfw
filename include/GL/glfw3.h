@@ -482,6 +482,8 @@ typedef void (* GLFWcursorenterfun)(GLFWwindow,int);
 typedef void (* GLFWscrollfun)(GLFWwindow,double,double);
 typedef void (* GLFWkeyfun)(GLFWwindow,int,int);
 typedef void (* GLFWcharfun)(GLFWwindow,int);
+typedef int (* GLFWfiledropstartfun)(GLFWwindow,int,const char*);
+typedef void (* GLFWfiledropendfun)(GLFWwindow,int,const char*);
 
 /* The video mode structure used by glfwGetVideoModes */
 typedef struct
@@ -545,6 +547,8 @@ GLFWAPI void glfwSetWindowCloseCallback(GLFWwindowclosefun cbfun);
 GLFWAPI void glfwSetWindowRefreshCallback(GLFWwindowrefreshfun cbfun);
 GLFWAPI void glfwSetWindowFocusCallback(GLFWwindowfocusfun cbfun);
 GLFWAPI void glfwSetWindowIconifyCallback(GLFWwindowiconifyfun cbfun);
+GLFWAPI void glfwSetWindowFileDropStartCallback(GLFWfiledropstartfun cbfun);
+GLFWAPI void glfwSetWindowFileDropEndCallback(GLFWfiledropendfun cbfun);
 
 /* Event handling */
 GLFWAPI void glfwPollEvents(void);

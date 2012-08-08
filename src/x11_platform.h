@@ -142,6 +142,16 @@ typedef struct _GLFWwindowX11
 
 } _GLFWwindowX11;
 
+//------------------------------------------------------------------------
+// Platform-specific window property
+//------------------------------------------------------------------------
+typedef struct _GLFWWindowX11Property
+{
+	unsigned char *data;
+	int format, nitems;
+	Atom type;
+} _GLFWWindowX11Property;
+
 
 //------------------------------------------------------------------------
 // Platform-specific library global data for X11
